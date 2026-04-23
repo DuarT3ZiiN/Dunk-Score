@@ -1,0 +1,2 @@
+data/raw/csv/play_by_play.csv filter=lfs diff=lfs merge=lfs -text
+data/raw/*.sqlite filter=lfs diff=lfs merge=lfs -text
