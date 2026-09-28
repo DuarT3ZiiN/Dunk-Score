@@ -1,95 +1,50 @@
-import os
+"""Gera data/processed/training_games.csv com as mesmas features que a API usa."""
+import argparse
+import sys
+
 import pandas as pd
-from sqlalchemy import create_engine
+from sqlalchemy import text
 
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres123")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "nba")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
-POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+from common import BACKEND_DIR, PROCESSED_DIR, get_engine
 
-DATABASE_URL = (
-    f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
-    f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
-)
+sys.path.insert(0, str(BACKEND_DIR))
+from app.services.features import FEATURE_COLUMNS, feature_sql  # noqa: E402
 
-engine = create_engine(DATABASE_URL)
-
-query = """
-WITH base_games AS (
-    SELECT
-        TRIM(g.external_id) AS external_id,
-        g.game_date::timestamp AS game_date,
-        TRIM(g.home_team_external_id) AS home_team_external_id,
-        TRIM(g.away_team_external_id) AS away_team_external_id,
-        CASE
-            WHEN g.home_score > g.away_score THEN 1
-            ELSE 0
-        END AS home_win
-    FROM games_kaggle g
-    WHERE g.home_score IS NOT NULL
-      AND g.away_score IS NOT NULL
-),
-
-home_stats AS (
-    SELECT
-        bg.external_id,
-        AVG(t.pts) AS home_avg_points,
-        AVG(t.reb) AS home_avg_rebounds,
-        AVG(t.ast) AS home_avg_assists,
-        AVG(t.tov) AS home_avg_turnovers,
-        AVG(t.fg_pct) AS home_fg_pct,
-        SUM(CASE WHEN t.wl = 'W' THEN 1 ELSE 0 END) AS home_last10_wins
-    FROM base_games bg
-    LEFT JOIN LATERAL (
-        SELECT *
-        FROM team_game_stats_long t
-        WHERE TRIM(t.team_external_id) = bg.home_team_external_id
-          AND t.game_date::timestamp < bg.game_date
-        ORDER BY t.game_date DESC
-        LIMIT 10
-    ) t ON TRUE
-    GROUP BY bg.external_id
-),
-
-away_stats AS (
-    SELECT
-        bg.external_id,
-        AVG(t.pts) AS away_avg_points,
-        AVG(t.reb) AS away_avg_rebounds,
-        AVG(t.ast) AS away_avg_assists,
-        AVG(t.tov) AS away_avg_turnovers,
-        AVG(t.fg_pct) AS away_fg_pct,
-        SUM(CASE WHEN t.wl = 'W' THEN 1 ELSE 0 END) AS away_last10_wins
-    FROM base_games bg
-    LEFT JOIN LATERAL (
-        SELECT *
-        FROM team_game_stats_long t
-        WHERE TRIM(t.team_external_id) = bg.away_team_external_id
-          AND t.game_date::timestamp < bg.game_date
-        ORDER BY t.game_date DESC
-        LIMIT 10
-    ) t ON TRUE
-    GROUP BY bg.external_id
-)
-
-SELECT
-    bg.external_id,
-    COALESCE(h.home_avg_points, 100.0) - COALESCE(a.away_avg_points, 100.0) AS points_diff,
-    COALESCE(h.home_avg_rebounds, 40.0) - COALESCE(a.away_avg_rebounds, 40.0) AS rebounds_diff,
-    COALESCE(h.home_avg_assists, 20.0) - COALESCE(a.away_avg_assists, 20.0) AS assists_diff,
-    COALESCE(h.home_avg_turnovers, 15.0) - COALESCE(a.away_avg_turnovers, 15.0) AS turnovers_diff,
-    COALESCE(h.home_last10_wins, 5.0) - COALESCE(a.away_last10_wins, 5.0) AS form_diff,
-    COALESCE(h.home_fg_pct, 0.45) - COALESCE(a.away_fg_pct, 0.45) AS fg_pct_diff,
-    bg.home_win
-FROM base_games bg
-LEFT JOIN home_stats h ON h.external_id = bg.external_id
-LEFT JOIN away_stats a ON a.external_id = bg.external_id
+TRAINING_FILTER = """
+    g.season_type IN ('Regular Season', 'Playoffs')
+    AND g.home_score IS NOT NULL
+    AND g.away_score IS NOT NULL
+    AND g.season >= :min_season
 """
-if __name__ == "__main__":
-    df = pd.read_sql(query, engine)
-    df.to_csv("data/processed/historical_games_features.csv", index=False)
 
-    print(df.head())
+# Times com pouco histórico geram features pouco confiáveis (começo da base).
+MIN_PRIOR_GAMES = 5
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--min-season", type=int, default=2000,
+                        help="Primeira temporada usada (o jogo dos anos 60 não é o de hoje).")
+    args = parser.parse_args()
+
+    engine = get_engine()
+    df = pd.read_sql(text(feature_sql(TRAINING_FILTER)), engine, params={"min_season": args.min_season})
+
+    df = df[(df["home_games"] >= MIN_PRIOR_GAMES) & (df["away_games"] >= MIN_PRIOR_GAMES)].copy()
+    df["home_win"] = (df["home_score"] > df["away_score"]).astype(int)
+    df["total_points"] = df["home_score"] + df["away_score"]
+    df = df.sort_values("game_date")
+
+    columns = ["game_id", "game_date", "season", "season_type", "home_avg_points", "away_avg_points",
+               *FEATURE_COLUMNS, "home_win", "total_points"]
+    out = PROCESSED_DIR / "training_games.csv"
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    df[columns].to_csv(out, index=False)
+
+    print(df[columns].head())
     print(df.shape)
-    print("Arquivo salvo em data/processed/historical_games_features.csv")
+    print(f"Arquivo salvo em {out}")
+
+
+if __name__ == "__main__":
+    main()
