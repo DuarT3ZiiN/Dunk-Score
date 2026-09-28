@@ -31,3 +31,7 @@ data/processed/
 .DS_Store
 Thumbs.db
 *.log
+node_modules/
+*.joblib
+Dunk-Score/BACKEND/ml/metrics.json
+dump.rdb

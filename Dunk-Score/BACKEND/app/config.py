@@ -13,15 +13,13 @@ class Settings(BaseSettings):
     BALLDONTLIE_API_KEY: str | None = None
     SPORTRADAR_API_KEY: str | None = None
 
+    # Gerado por ml/train.py. O pacote salvo já carrega a versão e as features.
     MODEL_PATH: str = "/app/ml/model.joblib"
-    MODEL_VERSION: str = "baseline-logreg-v2"
 
-    PROJECTED_TOTAL_BASELINE: float = 224.5
-    PROJECTED_TOTAL_REFERENCE_PACE: float = 97.0
-    PROJECTED_TOTAL_PACE_FACTOR: float = 0.8
+    # Fuso usado para decidir qual é o "hoje" da NBA.
+    GAMES_TIMEZONE: str = "America/New_York"
 
-    CONFIDENCE_CENTER: float = 0.5
-    CONFIDENCE_SCALE: float = 2.0
+    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
 
     model_config = SettingsConfigDict(
         env_file=".env",

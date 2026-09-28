@@ -1,59 +1,62 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, Numeric, TIMESTAMP, ForeignKey, JSON
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, JSON, Text, TIMESTAMP
 from sqlalchemy.sql import func
+
 from app.db import Base
+
+# Espelha DADOS/sql/init.sql, que é a fonte da verdade do esquema.
+
 
 class Team(Base):
     __tablename__ = "teams"
-    id = Column(Integer, primary_key=True)
-    external_id = Column(String(50), unique=True, nullable=False)
-    name = Column(Text, nullable=False)
+    external_id = Column(Text, primary_key=True)
     abbreviation = Column(Text)
+    city = Column(Text)
+    nickname = Column(Text)
+    full_name = Column(Text, nullable=False)
     conference = Column(Text)
     division = Column(Text)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
+
 class Game(Base):
     __tablename__ = "games"
-    id = Column(Integer, primary_key=True)
-    external_id = Column(String(50), unique=True, nullable=False)
+    external_id = Column(Text, primary_key=True)
     game_date = Column(TIMESTAMP, nullable=False)
-    home_team_id = Column(Integer, ForeignKey("teams.id"))
-    away_team_id = Column(Integer, ForeignKey("teams.id"))
+    season = Column(Integer)
+    season_type = Column(Text)
+    home_team_external_id = Column(Text, ForeignKey("teams.external_id"), nullable=False)
+    away_team_external_id = Column(Text, ForeignKey("teams.external_id"), nullable=False)
     home_score = Column(Integer)
     away_score = Column(Integer)
     status = Column(Text)
-    season = Column(Integer)
+    source = Column(Text, nullable=False, default="kaggle")
     created_at = Column(TIMESTAMP, server_default=func.now())
-    updated_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+
 
 class TeamGameStats(Base):
     __tablename__ = "team_game_stats"
-    id = Column(Integer, primary_key=True)
-    game_id = Column(Integer, ForeignKey("games.id"))
-    team_id = Column(Integer, ForeignKey("teams.id"))
-    offensive_rating = Column(Numeric)
-    defensive_rating = Column(Numeric)
-    net_rating = Column(Numeric)
-    pace = Column(Numeric)
-    efg_pct = Column(Numeric)
-    ts_pct = Column(Numeric)
-    tov_pct = Column(Numeric)
-    reb_pct = Column(Numeric)
-    last5_wins = Column(Integer)
-    last10_wins = Column(Integer)
-    days_rest = Column(Integer)
-    is_back_to_back = Column(Boolean)
-    is_home = Column(Boolean)
-    created_at = Column(TIMESTAMP, server_default=func.now())
+    game_external_id = Column(Text, ForeignKey("games.external_id"), primary_key=True)
+    team_external_id = Column(Text, ForeignKey("teams.external_id"), primary_key=True)
+    game_date = Column(TIMESTAMP, nullable=False)
+    is_home = Column(Boolean, nullable=False)
+    wl = Column(Text)
+    fg_pct = Column(Float)
+    reb = Column(Float)
+    ast = Column(Float)
+    tov = Column(Float)
+    pts = Column(Float)
+    plus_minus = Column(Float)
+
 
 class Prediction(Base):
     __tablename__ = "predictions"
-    id = Column(Integer, primary_key=True)
-    game_id = Column(Integer, ForeignKey("games.id"))
+    game_external_id = Column(Text, ForeignKey("games.external_id"), primary_key=True)
     model_version = Column(Text, nullable=False)
-    home_win_prob = Column(Numeric, nullable=False)
-    away_win_prob = Column(Numeric, nullable=False)
-    projected_total = Column(Numeric)
-    confidence_score = Column(Numeric)
+    home_win_prob = Column(Float, nullable=False)
+    away_win_prob = Column(Float, nullable=False)
+    projected_total = Column(Float)
+    confidence_score = Column(Float)
     factors = Column(JSON)
     created_at = Column(TIMESTAMP, server_default=func.now())
+    updated_at = Column(TIMESTAMP, server_default=func.now())

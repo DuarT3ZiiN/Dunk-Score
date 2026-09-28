@@ -1,11 +1,13 @@
-import pandas as pd 
+import pandas as pd
+
+from common import RAW_DIR
 
 files = [
-"data/raw/csv/game.csv",
-"data/raw/csv/game_info.csv",
-"data/raw/csv/game_summary.csv",
-"data/raw/csv/line_score.csv",
-"data/raw/csv/other_stats.csv",
+RAW_DIR / "game.csv",
+RAW_DIR / "game_info.csv",
+RAW_DIR / "game_summary.csv",
+RAW_DIR / "line_score.csv",
+RAW_DIR / "other_stats.csv",
 ]
 
 for path in files:
